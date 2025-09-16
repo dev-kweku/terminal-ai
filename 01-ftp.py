@@ -184,3 +184,92 @@ def load_gitignore_patterns(directory):
                 if line and not line.startwith('#'):
                     patterns.append(line)
     return patterns
+
+
+def should_ignore(file_path,patterns):
+    return any(fnmatch.fnmatch(file_path,pattern) for pattern in patterns)
+
+def add_file_to_context(file_path,added_files,action='to the chat context'):
+    exclude_dirs={
+        '__pychache__','.git','node_modules','venv','env','.vscode','.idea','dist','build','coverage','logs'
+    }
+    gitignore_patterns=load_gitignore_patterns('.') if os.path.exists('.gitignore') else []
+
+    if os.path.isfile(file_path):
+        if any(ex_dir in file_path for ex_dir in excluded_dirs):
+            print(coloured(f"Skipped .gitignore match: {file_path}","yellow"))
+            return
+        if gitignore_patterns and should_ignore(file_path,gitignore_patterns):
+            print(coloured(f"Skipped .gitignore match: {file_path}","yellow"))
+            return
+        if is_binary_file(file_path):
+            print(coloured(f"Skipped binary file:{file_path}","yellow"))
+            return
+        try:
+            with open(file_path,'r',encoding='utf-8',errors='ignore') as file:
+                added_files[file_path]=file.read()
+                print(coloured(f"Added {file_path} {action}.","green"))
+        except Exception as e:
+            print(coloured(f"Error reading {file_path}:{e}", "red"))
+    else:
+        print(coloured(f"Error: {file_path} is not a file.","red"))
+
+
+# Ai chat
+def chat_with_ai(user_message,is_edit_request=False,retry_count=0,added_files=None):
+    global last_ai_response,conversation_history
+    try:
+        if added_files:
+            file_context="Added files:\n"
+            for file_path,content in added_files.items():
+                file_context += f"File: {file_path}\nContent:\n{content}\n\n"
+            user_message=f"{file_context}\n{user_message}"
+
+        if not is_edit_request:
+            history="\n".join(
+                [f"User: {msg}" if i % 2==0 else f"AI: {msg}"
+                for i,msg in enumerate(conversation_history)]
+            )
+            if history:
+                user_message=f"{history}\nUser:{user_message}"
+
+        # get hugging face generation here
+        inputs=tokenizer(user_message,return_tensors="pt").to(model.device)
+
+        streamer=TextIteratorStreamer(tokenizer,skip_prompt=True,skip_special_token=True)
+
+        generation_kwargs=dict(
+            **inputs,
+            streamer=streamer,
+            temperature=0.7,
+            do_sample=True
+        )
+
+        print(coloured("\nAI is thinking...\n","magenta"))
+
+        thread=threading.Thread(target=model.generate,kwargs=generation_kwargs)
+        thread_start()
+
+        response_content=""
+        print("AI: ",end=" ")
+        for new_text in streamer:
+            print(new_text,end="",flush=True)
+            response_content += new_text
+        print()
+
+        last_ai_response=response_content
+
+
+        if not is_edit_request:
+            conversation_history.append(user_message)
+            conversation_history.append(last_ai_response)
+            if len(conversation_history) > 20:
+                conversation_history=conversation_history[-20]
+
+        return last_ai_response
+
+    except Exception as e:
+        print(coloured(f"\nError while running Hugging Face model: {e}","red"))
+        return None
+
+# main loop into ai
