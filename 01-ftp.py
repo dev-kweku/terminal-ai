@@ -273,3 +273,39 @@ def chat_with_ai(user_message,is_edit_request=False,retry_count=0,added_files=No
         return None
 
 # main loop into ai
+def main():
+    global last_ai_response,conversation_history
+
+    print(coloured(f"Hugging Face Ai engineer is ready (model: {MODEL_NAME}).","cyan"))
+    print("\nAvailable commands: /edit /create /add /review /planning /reset /debug /quit")
+
+    style=Style.from_dict({'prompt':'cyan'})
+    files=[f for f in os.listen('.') if os.path.isfile(f)]
+
+    completer=WordCompleter(
+        ['/edit','/create','/add','/quit','/debug','/reset','/review','/planning' + files],ignore_case=True
+    )
+
+    added_files={}
+
+    while True:
+
+        user_input=prompt("You: ",style=style,completer=completer).strip()
+        if user_input.lower()=='/quit':
+            print("Goodbye dev!")
+            break
+        elif user_input.lower()=='/debug':
+            print(coloured("Last AI Response: ","blue"))
+            print(last_ai_response or "None yet.")
+        elif user_input.lower()=='/reset':
+            conversation_history=[]
+            added_files.clear()
+            last_ai_response=None
+            print(coloured("Context reset.","green"))
+        else:
+            ai_response=chat_with_ai(user_input,added_files=added_files)
+            if ai_response:
+                logging.info("AI responded successfully")
+
+if __name__=="__main__":
+    main()
