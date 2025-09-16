@@ -1,33 +1,35 @@
 import os
-import fmatch
+import fnmatch
 import logging
 import time
 import re
 import difflib
 from dotenv import load_dotenv
-from tearmcolor import colored
+from termcolor import colored
 from prompt_toolkit import prompt
 from prompt_toolkit.styles import Style
-from prompt_toolkit.compilation import WordCompeter
+from prompt_toolkit.completion import WordCompleter
 from rich import print as rprint
 from rich.markdown import Markdown
 from rich.console import Console
-from transformers import AutoModelForCausalLM,AutoTokenizer,TextIteratorStreamer
+from rich.table import Table
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer, AutoModelForSeq2SeqLM
 import torch
 import threading
 
 
 load_dotenv()
 
-MODEL_NAME = os.getenv("HF_MODEL", "HuggingFaceH4/zephyr-7b-beta")
+# MODEL_NAME = os.getenv("HF_MODEL", "HuggingFaceH4/zephyr-7b-beta")
+MODEL_NAME=os.getenv("HF_MODEL","google/flan-t5-base")
 print(colored(f"Loading model: {MODEL_NAME} ...","yellow"))
 
 tokenizer=AutoTokenizer.from_pretrained(MODEL_NAME)
-model=AutoModelForCausalLM.from_pretrained(
+model=AutoModelForSeq2SeqLM.from_pretrained(
     MODEL_NAME,
-    torch_dtype="auto",
-    device_map="auto"
-)
+    torch_dtype=torch.float32,
+    device_map=None
+).to("cpu")
 
 
 CREATE_SYSTEM_PROMPT = """You are an advanced o1 engineer designed to create files and folders based on user instructions. Your primary objective is to generate the content of the files to be created as code blocks. Each code block should specify whether it's a file or folder, along with its path.
